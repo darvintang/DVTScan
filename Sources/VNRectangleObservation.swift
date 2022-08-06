@@ -39,16 +39,9 @@ import Vision
 extension VNRectangleObservation: NameSpace { }
 public extension BaseWrapper where BaseType: VNRectangleObservation {
     /// 坐标转换
-    /// - Parameter imageView: 参考的视图，必须设置image之后
-    /// - Returns: 返回该二维码相对于`imageView`的位置
-    func into(_ imageView: UIImageView) -> CGRect {
-        guard let image = imageView.image else {
-            return .zero
-        }
-        let oldSize = image.size
-        let mode = imageView.contentMode
-        let rect = self.convertRect(image)
-        return rect.dvt.into(from: oldSize, fromScale: 1, to: imageView.bounds, mode: mode)
+    func into(canvasImage: UIImage, to: CGRect, mode: UIView.ContentMode = .scaleAspectFill) -> CGRect {
+        let rect = self.convertRect(canvasImage)
+        return rect.dvt.into(canvasSize: canvasImage.size, to: to, mode: mode)
     }
 
     /// 图片坐标转换

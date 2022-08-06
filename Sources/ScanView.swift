@@ -60,6 +60,10 @@ open class ScanView: UIView {
         return view
     }()
 
+    /// 识别范围，预览视图参考坐标系
+    public var cropRect: CGRect = .zero
+    /// 是否自动选中，如果扫描结果只有一个的时候该属性生效
+    public var autoSelect = true
     /// 扫描后选中结果的回调
     private var resultCompletion: ((_ result: String?) -> Void)?
     /// 扫描结束的回调，在这一步可以隐藏闪光灯、选择相册、扫描动画等操作了
@@ -103,9 +107,6 @@ open class ScanView: UIView {
     /// 支持的编码类型
     private var barcodeTypes: [BarcodeType] = [.qr, .code128]
 
-    /// 识别范围，预览视图参考坐标系
-    private var cropRect: CGRect = .zero
-
     /// 是否正在扫描
     private var isScaning = false {
         didSet {
@@ -117,9 +118,6 @@ open class ScanView: UIView {
             }
         }
     }
-
-    /// 是否自动选中，如果扫描结果只有一个的时候该属性生效
-    private var autoSelect = true
 
     /// 指定初始化函数
     /// - Parameters:
@@ -135,6 +133,7 @@ open class ScanView: UIView {
         self.barcodeTypes = barcodeTypes
         self.autoSelect = autoSelect
         self.resultCompletion = success
+        self.cropRect = cropRect
     }
 
     override private init(frame: CGRect) {
@@ -165,7 +164,7 @@ open class ScanView: UIView {
             return
         }
 
-        self.session = try CameraScan(preView: self, barcodeTypes: self.barcodeTypes, success: { [weak self] list, image in
+        self.session = try CameraScan(preView: self, barcodeTypes: self.barcodeTypes, cropRect: self.cropRect, success: { [weak self] list, image in
             self?.isScaning = false
             if let image = image {
                 self?.draw(list, image: image)
@@ -208,7 +207,7 @@ open class ScanView: UIView {
         self.resultImageView.isHidden = false
         for i in 0 ..< list.count {
             let res = list[i]
-            let frame = res.dvt.into(self.resultImageView)
+            let frame = res.dvt.into(canvasImage: image, to: self.resultImageView.bounds, mode: self.resultImageView.contentMode)
             if frame == .zero {
                 continue
             }
@@ -301,24 +300,25 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     private var arrayResult = [CIQRCodeFeature]()
 
     /// 扫码结果返回block
-    fileprivate var successBlock: ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)?
+    fileprivate var successBlock: (_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void
 
     /// 当前扫码结果是否处理
     private var isNeedScanResult = true
 
-    private var cropRect = CGRect.zero
-    private var barcodeTypes: [BarcodeType] = [.qr]
+    private var cropRect: CGRect
+    private var barcodeTypes: [BarcodeType]
     private var screenshot: UIImage?
 
     fileprivate init(preView: UIView,
-                     barcodeTypes: [BarcodeType] = [.qr],
-                     cropRect: CGRect = .zero,
+                     barcodeTypes: [BarcodeType],
+                     cropRect: CGRect,
                      success: @escaping ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)) throws {
         guard let device = self.device else {
             throw ScanError.cameraCaptureFailure(state: "未获取到相机对象")
         }
-        self.barcodeTypes = barcodeTypes
+        self.cropRect = cropRect
         self.successBlock = success
+        self.barcodeTypes = barcodeTypes
         self.outputMetadata = AVCaptureMetadataOutput()
         do {
             let input = try AVCaptureDeviceInput(device: device)
@@ -330,7 +330,6 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             throw ScanError.cameraCaptureFailure(state: error.localizedDescription)
         }
         super.init()
-        self.cropRect = cropRect
 
         if self.session.canAddOutput(self.outputMetadata) {
             self.session.addOutput(self.outputMetadata)
@@ -373,9 +372,16 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             return
         }
         ScanTool.scan(image, symbologies: self.barcodeTypes) { [weak self] result in
-            if let list = result,!list.isEmpty {
+            if let list = result?.filter({ res -> Bool in
+                // 过滤非指定识别范围的编码
+                if let rect = self?.cropRect, rect != .zero, let toRect = self?.previewLayer.bounds {
+                    return rect.contains(res.dvt.into(canvasImage: image, to: toRect))
+                } else {
+                    return true
+                }
+            }), !list.isEmpty {
                 self?.stop()
-                self?.successBlock?(list, image)
+                self?.successBlock(list, image)
             } else {
                 self?.isNeedScanResult = true
             }
