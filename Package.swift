@@ -27,7 +27,10 @@ let package = Package(
         .target(
             name: "DVTScan",
             dependencies: ["DVTUIKit"],
-            path: "Sources"
+            path: "Sources",
+            linkerSettings: [
+                .linkedFramework("Vision")
+            ]
         ),
         .testTarget(
             name: "DVTScanTests",

@@ -33,6 +33,7 @@
 
 import AVFoundation
 import UIKit
+import Vision
 
 open class ScanView: UIView {
     /// 相机扫描会话
@@ -62,7 +63,7 @@ open class ScanView: UIView {
     /// 扫描后选中结果的回调
     private var resultCompletion: ((_ result: String?) -> Void)?
     /// 扫描结束的回调，在这一步可以隐藏闪光灯、选择相册、扫描动画等操作了
-    public var scanCompletion: ((_ list: [CIQRCodeFeature], _ image: UIImage?) -> Void)?
+    public var scanCompletion: ((_ list: [VNBarcodeObservation], _ image: UIImage?) -> Void)?
 
     /// 标记按钮的图片
     private var tagImage = UIImage(dvt: .red, size: CGSize(width: 24, height: 24))?.dvt.image(cornerRadii: 12)
@@ -100,7 +101,7 @@ open class ScanView: UIView {
     private var oldScale: CGFloat = 1
 
     /// 支持的编码类型
-    private var metadataTypes: [AVMetadataObject.ObjectType] = [.qr]
+    private var barcodeTypes: [BarcodeType] = [.qr, .code128]
 
     /// 识别范围，预览视图参考坐标系
     private var cropRect: CGRect = .zero
@@ -126,14 +127,14 @@ open class ScanView: UIView {
     ///   - cropRect: 扫码的范围，参考坐标系为当前控件
     ///   - autoSelect: 是否自动选中，多码识别的时候有效
     ///   - success: 选中二维码/条码的回调
-    public convenience init(_ metadataTypes: [AVMetadataObject.ObjectType] = [.qr],
+    public convenience init(_ barcodeTypes: [BarcodeType] = [.qr, .code128],
                             cropRect: CGRect = .zero,
                             autoSelect: Bool = true,
                             success: @escaping (_ result: String?) -> Void) {
         self.init(frame: .zero)
+        self.barcodeTypes = barcodeTypes
         self.autoSelect = autoSelect
         self.resultCompletion = success
-        self.metadataTypes = metadataTypes
     }
 
     override private init(frame: CGRect) {
@@ -164,7 +165,7 @@ open class ScanView: UIView {
             return
         }
 
-        self.session = try CameraScan(preView: self, success: { [weak self] list, image in
+        self.session = try CameraScan(preView: self, barcodeTypes: self.barcodeTypes, success: { [weak self] list, image in
             self?.isScaning = false
             if let image = image {
                 self?.draw(list, image: image)
@@ -184,18 +185,23 @@ open class ScanView: UIView {
     /// 扫码相册选中的图片
     /// - Parameter image: 要扫描的图片
     public func scan(_ image: UIImage) {
-        let list = image.dvt.codes
-        self.draw(list, image: image)
+        ScanTool.scan(image) { result in
+            if let list = result {
+                self.draw(list, image: image)
+            } else {
+                self.resultCompletion?(nil)
+            }
+        }
     }
 
     /// 绘制二维码/条码所在的位置
     /// - Parameters:
     ///   - list: 二维码/条码信息
     ///   - image: 资源图片
-    open func draw(_ list: [CIQRCodeFeature], image: UIImage) {
+    open func draw(_ list: [VNBarcodeObservation], image: UIImage) {
         self.scanCompletion?(list, image)
         if list.count == 1, self.autoSelect {
-            self.resultCompletion?(list.first?.messageString)
+            self.resultCompletion?(list.first?.payloadStringValue)
         }
         self.resultImageView.dvt.removeAllSubView()
         self.resultImageView.image = image
@@ -214,16 +220,14 @@ open class ScanView: UIView {
 
     /// 获取二维码/条码标记的按钮，默认随机颜色
     /// - Parameter feature: 二维码/条码信息
-    open func getTagButton(_ feature: CIQRCodeFeature) -> UIButton {
+    open func getTagButton(_ barcode: VNBarcodeObservation) -> UIButton {
         let btn = UIButton()
-
         btn.setImage(self.tagImage, for: .normal)
         btn.setBackgroundImage(self.tagBackgroundImage, for: .normal)
         btn.bounds = CGRect(origin: .zero, size: CGSize(width: 44, height: 44))
-
         self.configTagUIButton?(btn)
         btn.dvt.add { [weak self] _ in
-            self?.resultCompletion?(feature.messageString)
+            self?.resultCompletion?(barcode.payloadStringValue)
         }
         return btn
     }
@@ -297,22 +301,23 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     private var arrayResult = [CIQRCodeFeature]()
 
     /// 扫码结果返回block
-    private var successBlock: (_ result: [CIQRCodeFeature], _ image: UIImage?) -> Void
+    fileprivate var successBlock: ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)?
 
     /// 当前扫码结果是否处理
     private var isNeedScanResult = true
 
     private var cropRect = CGRect.zero
-
+    private var barcodeTypes: [BarcodeType] = [.qr]
     private var screenshot: UIImage?
 
     fileprivate init(preView: UIView,
-                     metadataTypes: [AVMetadataObject.ObjectType] = [.qr],
+                     barcodeTypes: [BarcodeType] = [.qr],
                      cropRect: CGRect = .zero,
-                     success: @escaping ((_ result: [CIQRCodeFeature], _ image: UIImage?) -> Void)) throws {
+                     success: @escaping ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)) throws {
         guard let device = self.device else {
             throw ScanError.cameraCaptureFailure(state: "未获取到相机对象")
         }
+        self.barcodeTypes = barcodeTypes
         self.successBlock = success
         self.outputMetadata = AVCaptureMetadataOutput()
         do {
@@ -339,7 +344,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         self.session.sessionPreset = AVCaptureSession.Preset.high
 
         self.outputMetadata.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-        self.outputMetadata.metadataObjectTypes = metadataTypes
+        self.outputMetadata.metadataObjectTypes = barcodeTypes.compactMap({ $0.avObjectType })
 
         var frame: CGRect = preView.bounds
         frame.origin = CGPoint.zero
@@ -367,26 +372,14 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             self.isNeedScanResult = true
             return
         }
-
-        let list = image.dvt.codes
-        if list.isEmpty {
-            self.isNeedScanResult = true
-        } else {
-            self.screenshot = image
-            list.forEach { feature in
-                if feature.messageString != nil {
-                    if self.cropRect != .zero {
-                        let rect = feature.bounds.dvt.into(from: CGRect(origin: .zero, size: image.size), fromScale: image.scale, to: self.previewLayer.bounds, mode: .scaleAspectFill)
-                        if self.cropRect.contains(rect) {
-                            self.arrayResult.append(feature)
-                        }
-                    } else {
-                        self.arrayResult.append(feature)
-                    }
-                }
+        ScanTool.scan(image, symbologies: self.barcodeTypes) { [weak self] result in
+            if let list = result,!list.isEmpty {
+                self?.stop()
+                self?.successBlock?(list, image)
+            } else {
+                self?.isNeedScanResult = true
             }
         }
-        self.complete()
     }
 
     fileprivate func start() {
@@ -457,15 +450,6 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             settings.previewPhotoFormat = previewFormat
         }
         self.photoOutput.capturePhoto(with: settings, delegate: self)
-    }
-
-    private func complete() {
-        if self.arrayResult.isEmpty {
-            self.isNeedScanResult = true
-        } else {
-            self.stop()
-            self.successBlock(self.arrayResult, self.screenshot)
-        }
     }
 
     fileprivate func focus(_ point: CGPoint) throws {

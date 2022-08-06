@@ -17,6 +17,7 @@ Pod::Spec.new do |s|
   s.ios.deployment_target = '12.0'
 
   s.source_files = 'Sources/**/*.swift'
+  s.frameworks = 'Vision'
 
   s.dependency 'DVTUIKit', '~> 2.0.1'
 
