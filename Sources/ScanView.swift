@@ -43,7 +43,7 @@ open class ScanView: UIView {
     private lazy var resultImageView: UIImageView = {
         let imageView = UIImageView()
         imageView.isUserInteractionEnabled = true
-        imageView.contentMode = .scaleAspectFill
+        imageView.backgroundColor = .black
         self.addSubview(imageView)
         return imageView
     }()
@@ -114,6 +114,7 @@ open class ScanView: UIView {
                 self.addZoomGesture()
                 self.addFocusGesture()
             } else {
+                self.session?.stop()
                 self.removeGesture()
             }
         }
@@ -171,6 +172,7 @@ open class ScanView: UIView {
                 self?.draw(list, image: image)
             }
         })
+
         self.resultImageView.frame = self.bounds
         self.resultImageView.isHidden = true
         self.session?.start()
@@ -183,14 +185,14 @@ open class ScanView: UIView {
     }
 
     /// 扫码相册选中的图片
+    ///
+    /// 请勿传递比例奇特(1:10,10:1)的图片
+    /// 对于宽高悬殊的图片扫码结果显示不友好
+    ///
     /// - Parameter image: 要扫描的图片
     public func scan(_ image: UIImage) {
-        ScanTool.scan(image) { result in
-            if let list = result {
-                self.draw(list, image: image)
-            } else {
-                self.resultCompletion?(nil)
-            }
+        ScanTool.scan(image) { [weak self] result in
+            self?.draw(result ?? [], image: image, mode: .scaleAspectFit)
         }
     }
 
@@ -198,7 +200,9 @@ open class ScanView: UIView {
     /// - Parameters:
     ///   - list: 二维码/条码信息
     ///   - image: 资源图片
-    open func draw(_ list: [VNBarcodeObservation], image: UIImage) {
+    ///   - mode: 结果预览模式
+    open func draw(_ list: [VNBarcodeObservation], image: UIImage, mode: UIView.ContentMode = .scaleAspectFill) {
+        self.isScaning = false
         self.scanCompletion?(list, image)
         if list.count == 1, self.autoSelect {
             self.resultCompletion?(list.first?.payloadStringValue)
@@ -206,9 +210,10 @@ open class ScanView: UIView {
         self.resultImageView.dvt.removeAllSubView()
         self.resultImageView.image = image
         self.resultImageView.isHidden = false
+        self.resultImageView.contentMode = mode
         for i in 0 ..< list.count {
             let res = list[i]
-            let frame = res.dvt.into(canvasImage: image, to: self.resultImageView.bounds, mode: self.resultImageView.contentMode)
+            let frame = res.dvt.into(canvasImage: image, to: self.resultImageView.bounds, mode: mode)
             if frame == .zero {
                 continue
             }
@@ -218,7 +223,7 @@ open class ScanView: UIView {
         }
     }
 
-    /// 获取二维码/条码标记的按钮，默认随机颜色
+    /// 获取二维码/条码标记的按钮
     /// - Parameter feature: 二维码/条码信息
     open func getTagButton(_ barcode: VNBarcodeObservation) -> UIButton {
         let btn = UIButton()
@@ -351,6 +356,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         var frame: CGRect = preView.bounds
         frame.origin = CGPoint.zero
         self.previewLayer.frame = frame
+        preView.layer.sublayers?.filter({ $0 is AVCaptureVideoPreviewLayer }).first?.removeFromSuperlayer()
         preView.layer.insertSublayer(self.previewLayer, at: 0)
 
         if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.continuousAutoFocus) {

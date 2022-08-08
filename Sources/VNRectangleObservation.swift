@@ -45,7 +45,10 @@ public extension BaseWrapper where BaseType: VNRectangleObservation {
     }
 
     /// 图片坐标转换
-    /// - Parameter image: 识别的图片，目前只测试过right和up的。
+    ///
+    /// 目前只测试过right和up的
+    ///
+    /// - Parameter image: 识别的图片
     private func convertRect(_ image: UIImage) -> CGRect {
         let imageSize = image.size
         var w: CGFloat = 0, h: CGFloat = 0, x: CGFloat = 0, y: CGFloat = 0
