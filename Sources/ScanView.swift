@@ -51,10 +51,12 @@ open class ScanView: UIView {
     /// 对焦标记图
     private lazy var focusView: UIImageView = {
         let view = UIImageView()
-        self.configFocusView = { view in
-            view.backgroundColor = .red
-            view.bounds = CGRect(origin: .zero, size: CGSize(width: 32, height: 32))
-            view.layer.cornerRadius = 16
+        if self.configFocusView == nil {
+            self.configFocusView = { view in
+                view.backgroundColor = .red
+                view.bounds = CGRect(origin: .zero, size: CGSize(width: 32, height: 32))
+                view.layer.cornerRadius = 16
+            }
         }
         self.addSubview(view)
         return view
@@ -153,7 +155,7 @@ open class ScanView: UIView {
     }
 
     /// 准备开始，会检查基本设置，在此之前必须要确定视图的bounds
-    open func prepareStart() throws {
+    @discardableResult open func prepareStart() throws -> Bool {
         if self.bounds == .zero {
             throw ScanError.previewFailure(state: "请先设置视图的界限")
         }
@@ -163,7 +165,7 @@ open class ScanView: UIView {
         }
 
         if self.isScaning {
-            return
+            return false
         }
 
         self.session = try CameraScan(preView: self, barcodeTypes: self.barcodeTypes, cropRect: self.cropRect, success: { [weak self] list, image in
@@ -177,6 +179,7 @@ open class ScanView: UIView {
         self.resultImageView.isHidden = true
         self.session?.start()
         self.isScaning = true
+        return true
     }
 
     /// 闪光灯开关
@@ -186,8 +189,7 @@ open class ScanView: UIView {
 
     /// 扫码相册选中的图片
     ///
-    /// 请勿传递比例奇特(1:10,10:1)的图片
-    /// 对于宽高悬殊的图片扫码结果显示不友好
+    /// 扫码结果不在扫码区域范围内的结果会忽略
     ///
     /// - Parameter image: 要扫描的图片
     public func scan(_ image: UIImage) {
@@ -197,40 +199,63 @@ open class ScanView: UIView {
     }
 
     /// 绘制二维码/条码所在的位置
+    ///
     /// - Parameters:
     ///   - list: 二维码/条码信息
     ///   - image: 资源图片
     ///   - mode: 结果预览模式
     open func draw(_ list: [VNBarcodeObservation], image: UIImage, mode: UIView.ContentMode = .scaleAspectFill) {
         self.isScaning = false
-        self.scanCompletion?(list, image)
-        if list.count == 1, self.autoSelect {
-            self.resultCompletion?(list.first?.payloadStringValue)
-        }
         self.resultImageView.dvt.removeAllSubView()
         self.resultImageView.image = image
         self.resultImageView.isHidden = false
         self.resultImageView.contentMode = mode
+        var disposeList: [VNBarcodeObservation] = []
         for i in 0 ..< list.count {
             let res = list[i]
             let frame = res.dvt.into(canvasImage: image, to: self.resultImageView.bounds, mode: mode)
             if frame == .zero {
                 continue
             }
+            if self.cropRect != .zero, !self.cropRect.contains(frame.dvt.center) {
+                continue
+            }
+            disposeList.append(res)
             let btn = self.getTagButton(res)
             btn.center = frame.dvt.center
             self.resultImageView.addSubview(btn)
         }
+        self.scanCompletion?(disposeList, image)
+
+        if disposeList.count == 1, self.autoSelect {
+            self.resultCompletion?(disposeList.first?.payloadStringValue)
+        }
     }
 
     /// 获取二维码/条码标记的按钮
+    ///
+    /// 默认会有一个layer的缩放动画，如果不需要可以移除，key: animation
+    ///
     /// - Parameter feature: 二维码/条码信息
     open func getTagButton(_ barcode: VNBarcodeObservation) -> UIButton {
-        let btn = UIButton()
-        btn.setImage(self.tagImage, for: .normal)
-        btn.setBackgroundImage(self.tagBackgroundImage, for: .normal)
-        btn.bounds = CGRect(origin: .zero, size: CGSize(width: 44, height: 44))
-        self.configTagUIButton?(btn)
+        let btn = UIButton(type: .custom)
+        let animation = CAKeyframeAnimation(keyPath: "transform")
+        animation.duration = 2
+
+        animation.values = [CATransform3DMakeScale(1, 1, 1), CATransform3DMakeScale(0.75, 0.75, 1), CATransform3DMakeScale(1, 1, 1)]
+        animation.keyTimes = [0, 0.8, 1]
+        animation.repeatCount = 100000000
+
+        btn.layer.add(animation, forKey: "animation")
+
+        if let c = self.configTagUIButton {
+            c(btn)
+        } else {
+            btn.bounds = CGRect(origin: .zero, size: CGSize(width: 44, height: 44))
+            btn.setImage(self.tagImage, for: .normal)
+            btn.setBackgroundImage(self.tagBackgroundImage, for: .normal)
+        }
+
         btn.dvt.add { [weak self] _ in
             self?.resultCompletion?(barcode.payloadStringValue)
         }
