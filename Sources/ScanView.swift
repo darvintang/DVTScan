@@ -138,6 +138,7 @@ open class ScanView: UIView {
 
     override private init(frame: CGRect) {
         super.init(frame: frame)
+        self.clipsToBounds = true
     }
 
     @available(*, unavailable, renamed: "init(_:cropRect:autoSelect:success:)", message: "未实现，请勿使用该方法初始化实例对象")
