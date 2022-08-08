@@ -242,8 +242,10 @@ fileprivate extension ScanView {
     /// 点击对焦手势的处理
     @objc func focus(_ gesture: UITapGestureRecognizer) {
         let point = gesture.location(in: self)
-        try? self.session?.focus(point)
-        self.showFocusPoint(point)
+        if self.cropRect != .zero, self.cropRect.contains(point) {
+            try? self.session?.focus(point)
+            self.showFocusPoint(point)
+        }
     }
 
     /// 添加缩放手势
