@@ -423,9 +423,11 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     }
 
     fileprivate func start() {
-        if !self.session.isRunning {
-            self.isNeedScanResult = true
-            self.session.startRunning()
+        DispatchQueue.global(qos: .background).async {
+            if !self.session.isRunning {
+                self.session.startRunning()
+                self.isNeedScanResult = true
+            }
         }
     }
 
