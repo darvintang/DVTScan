@@ -32,6 +32,7 @@
  */
 
 import AVFoundation
+import DVTFoundation
 import UIKit
 import Vision
 
@@ -83,6 +84,26 @@ open class ScanView: UIView {
 
     /// 对焦动画，通过修改视图的透明度来实现视图的显示和隐藏
     public var focusAnimation: ((_ focusView: UIImageView) -> Void)?
+
+    private var brightnessTimer: GCDTimer?
+
+    public var brightnessBlock: ((_ brightness: CGFloat) -> Void)? {
+        didSet {
+            if let block = self.brightnessBlock {
+                // 添加亮度监听的计时器
+                self.brightnessTimer?.reload(true)
+                if self.brightnessTimer == nil {
+                    self.brightnessTimer = GCDTimer(queue: .main, deadline: .now(), repeating: .seconds(1), auto: true, eventHandler: { [weak self] in
+                        if let brightness = self?.session?.brightness, brightness != 0 {
+                            block(brightness)
+                        }
+                    })
+                }
+            } else {
+                self.brightnessTimer?.cancel()
+            }
+        }
+    }
 
     @available(*, unavailable, message: "视图的显示模式，为了限制设置为其它模式的时候导致对不上点，禁用该属性")
     override open var contentMode: UIView.ContentMode {
@@ -316,12 +337,12 @@ fileprivate extension ScanView {
     }
 }
 
-fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, AVCapturePhotoCaptureDelegate {
+fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
     private let device = AVCaptureDevice.default(for: AVMediaType.video)
     private var inputDevice: AVCaptureDeviceInput?
     private var outputMetadata: AVCaptureMetadataOutput
     private let photoOutput = AVCapturePhotoOutput()
-
+    private let videoDataOutput = AVCaptureVideoDataOutput()
     private let session = AVCaptureSession()
     private lazy var previewLayer: AVCaptureVideoPreviewLayer = {
         let previewLayer = AVCaptureVideoPreviewLayer(session: self.session)
@@ -341,6 +362,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     private var cropRect: CGRect
     private var barcodeTypes: [BarcodeType]
     private var screenshot: UIImage?
+    fileprivate var brightness: CGFloat = 0
 
     fileprivate init(preView: UIView,
                      barcodeTypes: [BarcodeType],
@@ -373,6 +395,11 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             self.photoOutput.isHighResolutionCaptureEnabled = true
         }
 
+        if self.session.canAddOutput(self.videoDataOutput) {
+            self.videoDataOutput.setSampleBufferDelegate(self, queue: .main)
+            self.session.addOutput(self.videoDataOutput)
+        }
+
         self.session.sessionPreset = AVCaptureSession.Preset.high
 
         self.outputMetadata.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
@@ -398,6 +425,14 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             return
         }
         self.captureImage()
+    }
+
+    fileprivate func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let metadataDict = CMCopyDictionaryOfAttachments(allocator: nil, target: sampleBuffer, attachmentMode: kCMAttachmentMode_ShouldPropagate) as? [CFString: Any] else {
+            return
+        }
+
+        self.brightness = ((metadataDict[kCGImagePropertyExifDictionary] as? [CFString: Any])?[kCGImagePropertyExifBrightnessValue] as? CGFloat) ?? 0
     }
 
     fileprivate func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
