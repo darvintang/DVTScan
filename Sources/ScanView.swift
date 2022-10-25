@@ -457,6 +457,11 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
+    fileprivate func photoOutput(_ output: AVCapturePhotoOutput, willCapturePhotoFor resolvedSettings: AVCaptureResolvedPhotoSettings) {
+        let soundID: UInt32 = 11 * 100 + 8
+        AudioServicesDisposeSystemSoundID(soundID)
+    }
+
     fileprivate func start() {
         DispatchQueue.global(qos: .background).async {
             if !self.session.isRunning {
