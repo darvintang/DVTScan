@@ -338,7 +338,7 @@ fileprivate extension ScanView {
 }
 
 fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
-    private let device = AVCaptureDevice.default(for: AVMediaType.video)
+    private var device: AVCaptureDevice?
     private var inputDevice: AVCaptureDeviceInput?
     private var outputMetadata: AVCaptureMetadataOutput
     private let photoOutput = AVCapturePhotoOutput()
@@ -368,6 +368,11 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
                      barcodeTypes: [BarcodeType],
                      cropRect: CGRect,
                      success: @escaping ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)) throws {
+        if #available(iOS 13.0, *) {
+            self.device = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
+        } else {
+            self.device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+        }
         guard let device = self.device else {
             throw ScanError.cameraCaptureFailure(state: "未获取到相机对象")
         }
@@ -563,7 +568,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             newScale = device.minAvailableVideoZoomFactor
         }
         try self.safetyChangeDevice {
-            device.videoZoomFactor = newScale
+            device.ramp(toVideoZoomFactor: newScale, withRate: 2)
         }
     }
 
