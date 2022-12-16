@@ -125,7 +125,14 @@ open class ScanView: UIView {
     }()
 
     /// 记录缩放比例
-    private var oldScale: CGFloat = 1
+    private var oldScale: CGFloat = 2
+
+    /// 默认焦距倍率，当默认焦距大于等于2的时候相机会自动切换
+    public var defaultScale: CGFloat = 2 {
+        didSet {
+            self.session?.defaultScale = self.defaultScale
+        }
+    }
 
     /// 支持的编码类型
     private var barcodeTypes: [BarcodeType] = [.qr, .code128]
@@ -309,7 +316,7 @@ fileprivate extension ScanView {
         let scale = gesture.scale
         // 记录手势开始时的缩放比例
         if gesture.state == .began {
-            self.oldScale = (try? self.session?.videoZoomFactor()) ?? 1
+            self.oldScale = (try? self.session?.videoZoomFactor()) ?? self.defaultScale
         }
         // 修改相机的缩放比例
         if gesture.state == .changed {
@@ -363,6 +370,9 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     private var barcodeTypes: [BarcodeType]
     private var screenshot: UIImage?
     fileprivate var brightness: CGFloat = 0
+
+    /// 默认倍率
+    fileprivate var defaultScale: CGFloat = 2
 
     fileprivate init(preView: UIView,
                      barcodeTypes: [BarcodeType],
@@ -472,6 +482,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             if !self.session.isRunning {
                 self.session.startRunning()
                 self.isNeedScanResult = true
+                try? self.zoom(self.defaultScale, animation: false)
             }
         }
     }
@@ -546,29 +557,33 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             if device.isFocusPointOfInterestSupported {
                 device.focusPointOfInterest = focusPoint
             }
-            if device.isFocusModeSupported(.autoFocus) {
-                device.focusMode = .autoFocus
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
             }
             if device.isExposurePointOfInterestSupported {
                 device.exposurePointOfInterest = focusPoint
             }
-            if device.isExposureModeSupported(.autoExpose) {
-                device.exposureMode = .autoExpose
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
             }
         }
     }
 
-    fileprivate func zoom(_ scale: CGFloat) throws {
+    fileprivate func zoom(_ scale: CGFloat, animation: Bool = true) throws {
         let device = try self.safetyDevice()
         var newScale = scale
         if newScale > device.maxAvailableVideoZoomFactor {
             newScale = device.maxAvailableVideoZoomFactor
         }
-        if newScale < device.minAvailableVideoZoomFactor {
-            newScale = device.minAvailableVideoZoomFactor
+        if newScale < max(device.minAvailableVideoZoomFactor, self.defaultScale) {
+            newScale = max(device.minAvailableVideoZoomFactor, self.defaultScale)
         }
         try self.safetyChangeDevice {
-            device.ramp(toVideoZoomFactor: newScale, withRate: 2)
+            if animation {
+                device.ramp(toVideoZoomFactor: newScale, withRate: 1.5)
+            } else {
+                device.videoZoomFactor = newScale
+            }
         }
     }
 
