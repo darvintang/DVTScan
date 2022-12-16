@@ -205,6 +205,7 @@ open class ScanView: UIView {
 
         self.resultImageView.frame = self.bounds
         self.resultImageView.isHidden = true
+        self.session?.defaultScale = self.defaultScale
         self.session?.start()
         self.isScaning = true
         return true
