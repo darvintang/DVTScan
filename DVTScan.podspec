@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = 'DVTScan'
-  s.version = '2.0.5'
+  s.version = '2.0.6'
   s.summary = 'DVTScan'
 
   s.description      = <<-DESC
@@ -14,7 +14,7 @@ Pod::Spec.new do |s|
   s.author = { 'darvin' => 'darvin@tcoding.cn' }
   s.source = { :git => 'https://github.com/darvintang/DVTScan.git', :tag => s.version.to_s }
 
-  s.ios.deployment_target = '12.0'
+  s.ios.deployment_target = '13.0'
 
   s.source_files = 'Sources/**/*.swift'
   s.frameworks = 'Vision'

@@ -125,10 +125,10 @@ open class ScanView: UIView {
     }()
 
     /// 记录缩放比例
-    private var oldScale: CGFloat = 2
+    private var oldScale: CGFloat = 1
 
-    /// 默认焦距倍率，当默认焦距大于等于2的时候相机会自动切换
-    public var defaultScale: CGFloat = 2 {
+    /// 默认焦距倍率，当默认焦距大于等于2的时候有超广角相机机型相机会自动切换
+    public var defaultScale: CGFloat = 1 {
         didSet {
             self.session?.defaultScale = self.defaultScale
         }
@@ -203,9 +203,9 @@ open class ScanView: UIView {
             }
         })
 
+        self.defaultScale = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back) == nil ? 1 : 2
         self.resultImageView.frame = self.bounds
         self.resultImageView.isHidden = true
-        self.session?.defaultScale = self.defaultScale
         self.session?.start()
         self.isScaning = true
         return true
@@ -373,17 +373,17 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     fileprivate var brightness: CGFloat = 0
 
     /// 默认倍率
-    fileprivate var defaultScale: CGFloat = 2
+    fileprivate var defaultScale: CGFloat = 1
 
     fileprivate init(preView: UIView,
                      barcodeTypes: [BarcodeType],
                      cropRect: CGRect,
                      success: @escaping ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)) throws {
-        if #available(iOS 13.0, *) {
-            self.device = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
-        } else {
-            self.device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+        self.device = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
+        if self.device == nil {
+            self.device = AVCaptureDevice.default(for: .video)
         }
+
         guard let device = self.device else {
             throw ScanError.cameraCaptureFailure(state: "未获取到相机对象")
         }
