@@ -20,13 +20,15 @@ let package = Package(
     ],
     
     dependencies: [
-        .package(url: "https://github.com/darvintang/DVTUIKit.git", .upToNextMajor(from: "2.0.1"))
+        .package(url: "https://github.com/darvintang/DVTUIKit.git", .upToNextMinor(from: "2.1.0"))
     ],
     
     targets: [
         .target(
             name: "DVTScan",
-            dependencies: ["DVTUIKit"],
+            dependencies: [
+                .product(name: "DVTUIKitExtension", package: "DVTUIKit")
+            ],
             path: "Sources",
             linkerSettings: [
                 .linkedFramework("Vision")

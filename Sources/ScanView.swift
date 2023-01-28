@@ -36,6 +36,12 @@ import DVTFoundation
 import UIKit
 import Vision
 
+#if canImport(DVTUIKitExtension)
+    import DVTUIKitExtension
+#elseif canImport(DVTUIKit)
+    import DVTUIKit
+#endif
+
 open class ScanView: UIView {
     /// 相机扫描会话
     private var session: CameraScan?
@@ -209,6 +215,14 @@ open class ScanView: UIView {
         self.session?.start()
         self.isScaning = true
         return true
+    }
+
+    open func resume() {
+        self.session?.start()
+    }
+
+    open func stop() {
+        self.session?.stop()
     }
 
     /// 闪光灯开关
@@ -481,18 +495,19 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
     fileprivate func start() {
         DispatchQueue.global(qos: .background).async {
             if !self.session.isRunning {
+                try? self.zoom(self.defaultScale, animation: false)
                 self.session.startRunning()
                 self.isNeedScanResult = true
-                try? self.zoom(self.defaultScale, animation: false)
             }
         }
     }
 
     fileprivate func stop() {
-        if self.session.isRunning {
-            self.isNeedScanResult = false
-            self.session.stopRunning()
-            self.previewLayer.removeFromSuperlayer()
+        DispatchQueue.global(qos: .background).async {
+            if self.session.isRunning {
+                self.isNeedScanResult = false
+                self.session.stopRunning()
+            }
         }
     }
 

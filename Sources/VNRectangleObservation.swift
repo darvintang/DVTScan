@@ -32,9 +32,14 @@
  */
 
 import DVTFoundation
-import DVTUIKit
 import UIKit
 import Vision
+
+#if canImport(DVTUIKitExtension)
+    import DVTUIKitExtension
+#elseif canImport(DVTUIKit)
+    import DVTUIKit
+#endif
 
 extension VNRectangleObservation: NameSpace { }
 public extension BaseWrapper where BaseType: VNRectangleObservation {
