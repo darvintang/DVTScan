@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = 'DVTScan'
-  s.version = '2.1.0'
+  s.version = '2.0.0'
   s.summary = 'DVTScan'
 
   s.description      = <<-DESC
@@ -19,7 +19,7 @@ Pod::Spec.new do |s|
   s.source_files = 'Sources/**/*.swift'
   s.frameworks = 'Vision'
 
-  s.dependency 'DVTUIKit/Extension', '~> 2.1.0'
+  s.dependency 'DVTUIKit/Extension', '~> 2.0.0'
 
   s.swift_version = '5'
   s.requires_arc  = true

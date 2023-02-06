@@ -9,7 +9,7 @@
 
  MIT License
 
- Copyright (c) 2022 darvin http://blog.tcoding.cn
+ Copyright (c) 2023 darvin http://blog.tcoding.cn
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -34,24 +34,7 @@
 import UIKit
 
 open class ScanAnimationView: UIView, CAAnimationDelegate {
-    public var image: UIImage? {
-        didSet {
-            self.imageView.image = self.image
-        }
-    }
-
-    public var duration: CGFloat = 2
-
-    private lazy var imageView: UIImageView = {
-        let view = UIImageView()
-        view.contentMode = .scaleAspectFill
-        view.backgroundColor = .clear
-        view.frame = .zero
-        return view
-    }()
-
-    private var isStop = true
-
+    // MARK: Lifecycle
     override public init(frame: CGRect) {
         super.init(frame: frame)
         self.didInitialize()
@@ -74,6 +57,7 @@ open class ScanAnimationView: UIView, CAAnimationDelegate {
         fatalError("init(coder:) has not been implemented")
     }
 
+    // MARK: Open
     open func start() {
         let rect = self.bounds
         guard let image = self.image, rect != .zero else {
@@ -114,4 +98,24 @@ open class ScanAnimationView: UIView, CAAnimationDelegate {
             self.start()
         }
     }
+
+    // MARK: Public
+    public var duration: CGFloat = 2
+
+    public var image: UIImage? {
+        didSet {
+            self.imageView.image = self.image
+        }
+    }
+
+    // MARK: Private
+    private lazy var imageView: UIImageView = {
+        let view = UIImageView()
+        view.contentMode = .scaleAspectFill
+        view.backgroundColor = .clear
+        view.frame = .zero
+        return view
+    }()
+
+    private var isStop = true
 }

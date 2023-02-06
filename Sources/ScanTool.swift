@@ -9,7 +9,7 @@
 
  MIT License
 
- Copyright (c) 2022 darvin http://blog.tcoding.cn
+ Copyright (c) 2023 darvin http://blog.tcoding.cn
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -31,24 +31,15 @@
 
  */
 
-import AVFoundation
-import Foundation
 import UIKit
 import Vision
+import Foundation
+import AVFoundation
 
 public enum BarcodeType: String, CaseIterable {
-    case aztec
-    case code128
-    case code39
-    case code93
-    case dataMatrix
-    case ean13
-    case ean8
-    case itf14
-    case pdf417
-    case qr
-    case upce
+    case aztec, code128, code39, code93, dataMatrix, ean13, ean8, itf14, pdf417, qr, upce
 
+    // MARK: Internal
     var vnSymbology: VNBarcodeSymbology {
         switch self {
             case .aztec:
@@ -122,12 +113,11 @@ public class ScanTool {
             }
         }
 
-        barcodeRequest.symbologies = symbologies.compactMap({ $0.vnSymbology })
+        barcodeRequest.symbologies = symbologies.compactMap { $0.vnSymbology }
         let handler = VNImageRequestHandler(cgImage: cgImage)
         DispatchQueue.global(qos: .userInteractive).async {
-            do {
-                try handler.perform([barcodeRequest])
-            } catch {
+            do { try handler.perform([barcodeRequest]) }
+            catch {
                 DispatchQueue.main.async {
                     completion(nil)
                 }

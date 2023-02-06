@@ -9,7 +9,7 @@
 
  MIT License
 
- Copyright (c) 2022 darvin http://blog.tcoding.cn
+ Copyright (c) 2023 darvin http://blog.tcoding.cn
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -40,7 +40,8 @@ public enum ScanError: Error {
     case cameraCaptureFailure(state: String)
     case changeCameraFailure(state: String)
 
-    var localizedDescription: String {
+    // MARK: Public
+    public var localizedDescription: String {
         switch self {
             case let .previewFailure(state):
                 return "预览视图异常：\(state)"

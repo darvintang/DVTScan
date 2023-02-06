@@ -9,7 +9,7 @@
 
  MIT License
 
- Copyright (c) 2022 darvin http://blog.tcoding.cn
+ Copyright (c) 2023 darvin http://blog.tcoding.cn
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -31,24 +31,26 @@
 
  */
 
-import DVTFoundation
 import UIKit
 import Vision
+import DVTFoundation
 
-#if canImport(DVTUIKitExtension)
-    import DVTUIKitExtension
+#if canImport(DVTUIKit_Extension)
+    import DVTUIKit_Extension
 #elseif canImport(DVTUIKit)
     import DVTUIKit
 #endif
 
 extension VNRectangleObservation: NameSpace { }
 public extension BaseWrapper where BaseType: VNRectangleObservation {
+    // MARK: Internal
     /// 坐标转换
     func into(canvasImage: UIImage, to: CGRect, mode: UIView.ContentMode = .scaleAspectFill) -> CGRect {
         let rect = self.convertRect(canvasImage)
         return rect.dvt.into(canvasSize: canvasImage.size, to: to, mode: mode)
     }
 
+    // MARK: Private
     /// 图片坐标转换
     ///
     /// 目前只测试过right和up的

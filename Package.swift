@@ -7,7 +7,7 @@ let package = Package(
     name: "DVTScan",
     
     platforms: [
-        .iOS(.v12)
+        .iOS(.v13)
     ],
     
     products: [
@@ -20,14 +20,14 @@ let package = Package(
     ],
     
     dependencies: [
-        .package(url: "https://github.com/darvintang/DVTUIKit.git", .upToNextMinor(from: "2.1.0"))
+        .package(url: "https://github.com/darvintang/DVTUIKit.git", .upToNextMinor(from: "2.0.0"))
     ],
     
     targets: [
         .target(
             name: "DVTScan",
             dependencies: [
-                .product(name: "DVTUIKitExtension", package: "DVTUIKit")
+                .product(name: "DVTUIKit.Extension", package: "DVTUIKit")
             ],
             path: "Sources",
             linkerSettings: [

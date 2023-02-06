@@ -9,7 +9,7 @@
 
  MIT License
 
- Copyright (c) 2022 darvin http://blog.tcoding.cn
+ Copyright (c) 2023 darvin http://blog.tcoding.cn
 
  Permission is hereby granted, free of charge, to any person obtaining a copy
  of this software and associated documentation files (the "Software"), to deal
@@ -31,131 +31,19 @@
 
  */
 
-import AVFoundation
-import DVTFoundation
 import UIKit
 import Vision
+import AVFoundation
+import DVTFoundation
 
-#if canImport(DVTUIKitExtension)
-    import DVTUIKitExtension
+#if canImport(DVTUIKit_Extension)
+    import DVTUIKit_Extension
 #elseif canImport(DVTUIKit)
     import DVTUIKit
 #endif
 
 open class ScanView: UIView {
-    /// 相机扫描会话
-    private var session: CameraScan?
-
-    /// 扫描结果快照图
-    private lazy var resultImageView: UIImageView = {
-        let imageView = UIImageView()
-        imageView.isUserInteractionEnabled = true
-        imageView.backgroundColor = .black
-        self.addSubview(imageView)
-        return imageView
-    }()
-
-    /// 对焦标记图
-    private lazy var focusView: UIImageView = {
-        let view = UIImageView()
-        if self.configFocusView == nil {
-            self.configFocusView = { view in
-                view.backgroundColor = .red
-                view.bounds = CGRect(origin: .zero, size: CGSize(width: 32, height: 32))
-                view.layer.cornerRadius = 16
-            }
-        }
-        self.addSubview(view)
-        return view
-    }()
-
-    /// 识别范围，预览视图参考坐标系
-    public var cropRect: CGRect = .zero
-    /// 是否自动选中，如果扫描结果只有一个的时候该属性生效
-    public var autoSelect = true
-    /// 扫描后选中结果的回调
-    private var resultCompletion: ((_ result: String?) -> Void)?
-    /// 扫描结束的回调，在这一步可以隐藏闪光灯、选择相册、扫描动画等操作了
-    public var scanCompletion: ((_ list: [VNBarcodeObservation], _ image: UIImage?) -> Void)?
-
-    /// 标记按钮的图片
-    private var tagImage = UIImage(dvt: .red, size: CGSize(width: 24, height: 24))?.dvt.image(cornerRadii: 12)
-    private var tagBackgroundImage = UIImage(dvt: .white.dvt.alpha(0.8), size: CGSize(width: 36, height: 36))?.dvt.image(cornerRadii: 18)
-
-    /// 多码标记按钮配置
-    public var configTagUIButton: ((_ btn: UIButton) -> Void)?
-
-    /// 配置对焦的视图，默认是半径16的红色圆点
-    public var configFocusView: ((_ focusView: UIImageView) -> Void)?
-
-    /// 对焦动画，通过修改视图的透明度来实现视图的显示和隐藏
-    public var focusAnimation: ((_ focusView: UIImageView) -> Void)?
-
-    private var brightnessTimer: GCDTimer?
-
-    public var brightnessBlock: ((_ brightness: CGFloat) -> Void)? {
-        didSet {
-            if let block = self.brightnessBlock {
-                // 添加亮度监听的计时器
-                self.brightnessTimer?.reload(true)
-                if self.brightnessTimer == nil {
-                    self.brightnessTimer = GCDTimer(queue: .main, deadline: .now(), repeating: .seconds(1), auto: true, eventHandler: { [weak self] in
-                        if let brightness = self?.session?.brightness, brightness != 0 {
-                            block(brightness)
-                        }
-                    })
-                }
-            } else {
-                self.brightnessTimer?.cancel()
-            }
-        }
-    }
-
-    @available(*, unavailable, message: "视图的显示模式，为了限制设置为其它模式的时候导致对不上点，禁用该属性")
-    override open var contentMode: UIView.ContentMode {
-        willSet {
-            if newValue != .scaleAspectFill {
-                assertionFailure("只能为UIView.ContentMode.scaleAspectFill")
-            }
-        }
-    }
-
-    /// 对焦手势
-    private lazy var focusGesture: UITapGestureRecognizer = {
-        UITapGestureRecognizer(target: self, action: #selector(self.focus(_:)))
-    }()
-
-    /// 缩放手势
-    private lazy var zoomGesture: UIPinchGestureRecognizer = {
-        UIPinchGestureRecognizer(target: self, action: #selector(self.zoom(_:)))
-    }()
-
-    /// 记录缩放比例
-    private var oldScale: CGFloat = 2
-
-    /// 默认焦距倍率，当默认焦距大于等于2的时候相机会自动切换
-    public var defaultScale: CGFloat = 2 {
-        didSet {
-            self.session?.defaultScale = self.defaultScale
-        }
-    }
-
-    /// 支持的编码类型
-    private var barcodeTypes: [BarcodeType] = [.qr, .code128]
-
-    /// 是否正在扫描
-    private var isScaning = false {
-        didSet {
-            if self.isScaning {
-                self.addZoomGesture()
-                self.addFocusGesture()
-            } else {
-                self.session?.stop()
-                self.removeGesture()
-            }
-        }
-    }
-
+    // MARK: Lifecycle
     /// 指定初始化函数
     /// - Parameters:
     ///   - metadataTypes: 扫码识别的类型
@@ -188,6 +76,26 @@ open class ScanView: UIView {
         fatalError("不能用该方法初始化实例对象")
     }
 
+    // MARK: Open
+    /// 识别范围，预览视图参考坐标系
+    open var cropRect: CGRect = .zero
+    /// 是否自动选中，如果扫描结果只有一个的时候该属性生效
+    open var autoSelect = true
+
+    @available(*, unavailable, message: "视图的显示模式，为了限制设置为其它模式的时候导致对不上点，禁用该属性")
+    override open var contentMode: UIView.ContentMode {
+        willSet {
+            if newValue != .scaleAspectFill {
+                assertionFailure("只能为UIView.ContentMode.scaleAspectFill")
+            }
+        }
+    }
+
+    /// 默认焦距倍率，当默认焦距大于等于2的时候有超广角相机机型相机会自动切换
+    open var defaultScale: CGFloat = 1 {
+        didSet { self.session?.defaultScale = self.defaultScale }
+    }
+
     /// 准备开始，会检查基本设置，在此之前必须要确定视图的bounds
     @discardableResult open func prepareStart() throws -> Bool {
         if self.bounds == .zero {
@@ -209,9 +117,9 @@ open class ScanView: UIView {
             }
         })
 
+        self.defaultScale = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back) == nil ? 1 : 2
         self.resultImageView.frame = self.bounds
         self.resultImageView.isHidden = true
-        self.session?.defaultScale = self.defaultScale
         self.session?.start()
         self.isScaning = true
         return true
@@ -228,17 +136,6 @@ open class ScanView: UIView {
     /// 闪光灯开关
     @discardableResult open func setFlashlight(open: Bool) throws -> Bool? {
         return try self.session?.setFlashlight(open: open)
-    }
-
-    /// 扫码相册选中的图片
-    ///
-    /// 扫码结果不在扫码区域范围内的结果会忽略
-    ///
-    /// - Parameter image: 要扫描的图片
-    public func scan(_ image: UIImage) {
-        ScanTool.scan(image) { [weak self] result in
-            self?.draw(result ?? [], image: image, mode: .scaleAspectFit)
-        }
     }
 
     /// 绘制二维码/条码所在的位置
@@ -304,9 +201,115 @@ open class ScanView: UIView {
         }
         return btn
     }
+
+    // MARK: Public
+    /// 扫描结束的回调，在这一步可以隐藏闪光灯、选择相册、扫描动画等操作了
+    public var scanCompletion: ((_ list: [VNBarcodeObservation], _ image: UIImage?) -> Void)?
+
+    /// 多码标记按钮配置
+    public var configTagUIButton: ((_ btn: UIButton) -> Void)?
+
+    /// 配置对焦的视图，默认是半径16的红色圆点
+    public var configFocusView: ((_ focusView: UIImageView) -> Void)?
+
+    /// 对焦动画，通过修改视图的透明度来实现视图的显示和隐藏
+    public var focusAnimation: ((_ focusView: UIImageView) -> Void)?
+
+    public var brightnessBlock: ((_ brightness: CGFloat) -> Void)? {
+        didSet {
+            if let block = self.brightnessBlock {
+                // 添加亮度监听的计时器
+                self.brightnessTimer?.reload(true)
+                if self.brightnessTimer == nil {
+                    self.brightnessTimer = GCDTimer(repeating: .seconds(1), auto: true, event: { [weak self] in
+                        if let brightness = self?.session?.brightness, brightness != 0 {
+                            block(brightness)
+                        }
+                    })
+                }
+            } else {
+                self.brightnessTimer?.cancel()
+            }
+        }
+    }
+
+    /// 扫码相册选中的图片
+    ///
+    /// 扫码结果不在扫码区域范围内的结果会忽略
+    ///
+    /// - Parameter image: 要扫描的图片
+    public func scan(_ image: UIImage) {
+        ScanTool.scan(image) { [weak self] result in
+            self?.draw(result ?? [], image: image, mode: .scaleAspectFit)
+        }
+    }
+
+    // MARK: Private
+    /// 相机扫描会话
+    private var session: CameraScan?
+
+    /// 扫描结果快照图
+    private lazy var resultImageView: UIImageView = {
+        let imageView = UIImageView()
+        imageView.isUserInteractionEnabled = true
+        imageView.backgroundColor = .black
+        self.addSubview(imageView)
+        return imageView
+    }()
+
+    /// 对焦标记图
+    private lazy var focusView: UIImageView = {
+        let view = UIImageView()
+        if self.configFocusView == nil {
+            self.configFocusView = { view in
+                view.backgroundColor = .red
+                view.bounds = CGRect(origin: .zero, size: CGSize(width: 32, height: 32))
+                view.layer.cornerRadius = 16
+            }
+        }
+        self.addSubview(view)
+        return view
+    }()
+
+    /// 扫描后选中结果的回调
+    private var resultCompletion: ((_ result: String?) -> Void)?
+    /// 标记按钮的图片
+    private var tagImage = UIImage(dvt: .red, size: CGSize(width: 24, height: 24))?.dvt.image(cornerRadii: 12)
+    private var tagBackgroundImage = UIImage(dvt: .white.dvt.alpha(0.8), size: CGSize(width: 36, height: 36))?.dvt.image(cornerRadii: 18)
+
+    private var brightnessTimer: GCDTimer?
+
+    /// 对焦手势
+    private lazy var focusGesture: UITapGestureRecognizer = {
+        UITapGestureRecognizer(target: self, action: #selector(self.focus(_:)))
+    }()
+
+    /// 缩放手势
+    private lazy var zoomGesture: UIPinchGestureRecognizer = {
+        UIPinchGestureRecognizer(target: self, action: #selector(self.zoom(_:)))
+    }()
+
+    /// 记录缩放比例
+    private var oldScale: CGFloat = 1
+
+    /// 支持的编码类型
+    private var barcodeTypes: [BarcodeType] = [.qr, .code128]
+
+    /// 是否正在扫描
+    private var isScaning = false {
+        didSet {
+            if self.isScaning {
+                self.addZoomGesture()
+                self.addFocusGesture()
+            } else {
+                self.session?.stop()
+                self.removeGesture()
+            }
+        }
+    }
 }
 
-fileprivate extension ScanView {
+private extension ScanView {
     /// 添加对焦手势
     func addFocusGesture() {
         self.addGestureRecognizer(self.focusGesture)
@@ -359,44 +362,13 @@ fileprivate extension ScanView {
     }
 }
 
-fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
-    private var device: AVCaptureDevice?
-    private var inputDevice: AVCaptureDeviceInput?
-    private var outputMetadata: AVCaptureMetadataOutput
-    private let photoOutput = AVCapturePhotoOutput()
-    private let videoDataOutput = AVCaptureVideoDataOutput()
-    private let session = AVCaptureSession()
-    private lazy var previewLayer: AVCaptureVideoPreviewLayer = {
-        let previewLayer = AVCaptureVideoPreviewLayer(session: self.session)
-        previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
-        return previewLayer
-    }()
-
-    /// 存储返回结果
-    private var arrayResult = [CIQRCodeFeature]()
-
-    /// 扫码结果返回block
-    fileprivate var successBlock: (_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void
-
-    /// 当前扫码结果是否处理
-    private var isNeedScanResult = true
-
-    private var cropRect: CGRect
-    private var barcodeTypes: [BarcodeType]
-    private var screenshot: UIImage?
-    fileprivate var brightness: CGFloat = 0
-
-    /// 默认倍率
-    fileprivate var defaultScale: CGFloat = 2
-
-    fileprivate init(preView: UIView,
-                     barcodeTypes: [BarcodeType],
-                     cropRect: CGRect,
-                     success: @escaping ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)) throws {
-        if #available(iOS 13.0, *) {
-            self.device = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
-        } else {
-            self.device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+private class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, AVCapturePhotoCaptureDelegate, AVCaptureVideoDataOutputSampleBufferDelegate {
+    // MARK: Lifecycle
+    init(preView: UIView, barcodeTypes: [BarcodeType], cropRect: CGRect,
+         success: @escaping ((_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void)) throws {
+        self.device = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: .back)
+        if self.device == nil {
+            self.device = AVCaptureDevice.default(for: .video)
         }
         guard let device = self.device else {
             throw ScanError.cameraCaptureFailure(state: "未获取到相机对象")
@@ -411,7 +383,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
             if self.session.canAddInput(input) {
                 self.session.addInput(input)
             }
-        } catch let error {
+        } catch {
             throw ScanError.cameraCaptureFailure(state: error.localizedDescription)
         }
         super.init()
@@ -433,12 +405,12 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         self.session.sessionPreset = AVCaptureSession.Preset.high
 
         self.outputMetadata.setMetadataObjectsDelegate(self, queue: DispatchQueue.main)
-        self.outputMetadata.metadataObjectTypes = barcodeTypes.compactMap({ $0.avObjectType })
+        self.outputMetadata.metadataObjectTypes = barcodeTypes.compactMap { $0.avObjectType }
 
         var frame: CGRect = preView.bounds
         frame.origin = CGPoint.zero
         self.previewLayer.frame = frame
-        preView.layer.sublayers?.filter({ $0 is AVCaptureVideoPreviewLayer }).first?.removeFromSuperlayer()
+        preView.layer.sublayers?.filter { $0 is AVCaptureVideoPreviewLayer }.first?.removeFromSuperlayer()
         preView.layer.insertSublayer(self.previewLayer, at: 0)
 
         if device.isFocusPointOfInterestSupported && device.isFocusModeSupported(.continuousAutoFocus) {
@@ -448,24 +420,56 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
-    fileprivate func metadataOutput(_ output: AVCaptureMetadataOutput,
-                                    didOutput metadataObjects: [AVMetadataObject],
-                                    from connection: AVCaptureConnection) {
+    // MARK: Internal
+    /// 扫码结果返回block
+    var successBlock: (_ result: [VNBarcodeObservation], _ image: UIImage?) -> Void
+
+    var brightness: CGFloat = 0
+
+    /// 默认倍率
+    var defaultScale: CGFloat = 1
+
+    var device: AVCaptureDevice?
+    var inputDevice: AVCaptureDeviceInput?
+    var outputMetadata: AVCaptureMetadataOutput
+    let photoOutput = AVCapturePhotoOutput()
+    let videoDataOutput = AVCaptureVideoDataOutput()
+    let session = AVCaptureSession()
+    lazy var previewLayer: AVCaptureVideoPreviewLayer = {
+        let previewLayer = AVCaptureVideoPreviewLayer(session: self.session)
+        previewLayer.videoGravity = AVLayerVideoGravity.resizeAspectFill
+        return previewLayer
+    }()
+
+    /// 存储返回结果
+    var arrayResult = [CIQRCodeFeature]()
+
+    /// 当前扫码结果是否处理
+    var isNeedScanResult = true
+
+    var cropRect: CGRect
+    var barcodeTypes: [BarcodeType]
+    var screenshot: UIImage?
+
+    func metadataOutput(_ output: AVCaptureMetadataOutput,
+                        didOutput metadataObjects: [AVMetadataObject],
+                        from connection: AVCaptureConnection) {
         guard self.isNeedScanResult else {
             return
         }
         self.captureImage()
     }
 
-    fileprivate func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
-        guard let metadataDict = CMCopyDictionaryOfAttachments(allocator: nil, target: sampleBuffer, attachmentMode: kCMAttachmentMode_ShouldPropagate) as? [CFString: Any] else {
+    func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        guard let metadataDict = CMCopyDictionaryOfAttachments(allocator: nil, target: sampleBuffer,
+                                                               attachmentMode: kCMAttachmentMode_ShouldPropagate) as? [CFString: Any] else {
             return
         }
 
         self.brightness = ((metadataDict[kCGImagePropertyExifDictionary] as? [CFString: Any])?[kCGImagePropertyExifBrightnessValue] as? CGFloat) ?? 0
     }
 
-    fileprivate func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
+    func photoOutput(_ output: AVCapturePhotoOutput, didFinishProcessingPhoto photo: AVCapturePhoto, error: Error?) {
         guard error == nil, let data = photo.fileDataRepresentation(), let image = UIImage(data: data) else {
             self.isNeedScanResult = true
             return
@@ -487,12 +491,12 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
-    fileprivate func photoOutput(_ output: AVCapturePhotoOutput, willCapturePhotoFor resolvedSettings: AVCaptureResolvedPhotoSettings) {
+    func photoOutput(_ output: AVCapturePhotoOutput, willCapturePhotoFor resolvedSettings: AVCaptureResolvedPhotoSettings) {
         let soundID: UInt32 = 11 * 100 + 8
         AudioServicesDisposeSystemSoundID(soundID)
     }
 
-    fileprivate func start() {
+    func start() {
         DispatchQueue.global(qos: .background).async {
             if !self.session.isRunning {
                 try? self.zoom(self.defaultScale, animation: false)
@@ -502,7 +506,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
-    fileprivate func stop() {
+    func stop() {
         DispatchQueue.global(qos: .background).async {
             if self.session.isRunning {
                 self.isNeedScanResult = false
@@ -511,13 +515,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
-    private func isGetFlash() throws -> Bool {
-        let device = try self.safetyDevice()
-        return device.hasFlash && device.hasTorch
-    }
-
-    @discardableResult
-    fileprivate func setFlashlight(open: Bool) throws -> Bool {
+    @discardableResult func setFlashlight(open: Bool) throws -> Bool {
         guard try self.isGetFlash() else {
             return false
         }
@@ -529,44 +527,13 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         return (try self.safetyDevice().torchMode == .on) == open
     }
 
-    @discardableResult
-    fileprivate func changeFlashlight() throws -> Bool {
+    @discardableResult func changeFlashlight() throws -> Bool {
         let device = try self.safetyDevice()
         let torch = device.torchMode == .off
         return try self.setFlashlight(open: torch)
     }
 
-    private func safetyDevice() throws -> AVCaptureDevice {
-        guard let device = self.device else {
-            throw ScanError.cameraCaptureError
-        }
-        return device
-    }
-
-    private func safetyChangeDevice(_ event: () -> Void) throws {
-        let device = try self.safetyDevice()
-        do {
-            try device.lockForConfiguration()
-            event()
-            device.unlockForConfiguration()
-        } catch let error {
-            throw ScanError.changeCameraFailure(state: error.localizedDescription)
-        }
-    }
-
-    private func captureImage() {
-        self.isNeedScanResult = false
-        let settings = AVCapturePhotoSettings()
-        if let previewPixelType = settings.availablePreviewPhotoPixelFormatTypes.first {
-            let previewFormat = [
-                kCVPixelBufferPixelFormatTypeKey as String: previewPixelType,
-            ]
-            settings.previewPhotoFormat = previewFormat
-        }
-        self.photoOutput.capturePhoto(with: settings, delegate: self)
-    }
-
-    fileprivate func focus(_ point: CGPoint) throws {
+    func focus(_ point: CGPoint) throws {
         let focusPoint = self.previewLayer.captureDevicePointConverted(fromLayerPoint: point)
         let device = try self.safetyDevice()
         try self.safetyChangeDevice {
@@ -585,7 +552,7 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
-    fileprivate func zoom(_ scale: CGFloat, animation: Bool = true) throws {
+    func zoom(_ scale: CGFloat, animation: Bool = true) throws {
         let device = try self.safetyDevice()
         var newScale = scale
         if newScale > device.maxAvailableVideoZoomFactor {
@@ -603,7 +570,40 @@ fileprivate class CameraScan: NSObject, AVCaptureMetadataOutputObjectsDelegate, 
         }
     }
 
-    fileprivate func videoZoomFactor() throws -> CGFloat {
+    func videoZoomFactor() throws -> CGFloat {
         try self.safetyDevice().videoZoomFactor
+    }
+
+    func isGetFlash() throws -> Bool {
+        let device = try self.safetyDevice()
+        return device.hasFlash && device.hasTorch
+    }
+
+    func safetyDevice() throws -> AVCaptureDevice {
+        guard let device = self.device else {
+            throw ScanError.cameraCaptureError
+        }
+        return device
+    }
+
+    func safetyChangeDevice(_ event: () -> Void) throws {
+        let device = try self.safetyDevice()
+        do {
+            try device.lockForConfiguration()
+            event()
+            device.unlockForConfiguration()
+        } catch {
+            throw ScanError.changeCameraFailure(state: error.localizedDescription)
+        }
+    }
+
+    func captureImage() {
+        self.isNeedScanResult = false
+        let settings = AVCapturePhotoSettings()
+        if let previewPixelType = settings.availablePreviewPhotoPixelFormatTypes.first {
+            let previewFormat = [kCVPixelBufferPixelFormatTypeKey as String: previewPixelType]
+            settings.previewPhotoFormat = previewFormat
+        }
+        self.photoOutput.capturePhoto(with: settings, delegate: self)
     }
 }
